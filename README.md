@@ -1,9 +1,26 @@
 # FarRun
 
-## Great (in the future) Project to track and analyze runs
+A (hopefully great, in the future) project to track and analyze my runs
 
-## App reads data from .tcx files stored in `activities` folder
+## What it does ()
 
-## Stores them in db
+- Reads `.tcx` files exported from Garmin, stored in the `activities` folder :white_check_mark:
+- Stores the runs in a database :x:
+- Shows them in a web UI :x:
 
-## Displays them in web ui
+## Status
+
+Early days. Right now it only parses `.tcx` files and prints a summary of each run
+(date, distance, time). Database and web UI are next.
+
+## Running it
+
+Put your `.tcx` files in `activities/` and run:
+
+    go run ./cmd/farrun
+
+Needs Go 1.20 or newer.
+
+## Notes
+
+The `activities` folder is gitignored, because the files contain GPS tracks.
