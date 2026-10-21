@@ -20,15 +20,13 @@ func main() {
 	}
 
 	for _, tcx := range tcxList {
-		for _, a := range tcx.Activities {
-			totalDistance := 0.0
-			totalSeconds := 0.0
-			for _, l := range a.Laps {
-				totalDistance += l.DistanceMeters
-				totalSeconds += l.TotalTimeSeconds
-			}
-			secs := int(totalSeconds)
-			fmt.Printf("%s %s: %.0fm, %dm:%02ds\n", a.Sport, a.Id.In(loc).Format(time.DateOnly), totalDistance, secs/60, secs%60)
+		for _, a := range tcx.ToActivities() {
+			secs := int(a.DurationSeconds)
+			fmt.Printf("%s %s: %.2fkm, %d:%02dm\n",
+				a.Sport,
+				a.StartTime.In(loc).Format(time.DateOnly),
+				a.DistanceMeters/1000,
+				secs/60, secs%60)
 		}
 	}
 }

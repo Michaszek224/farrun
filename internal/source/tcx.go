@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/michaszek224/farrun/internal/model"
 )
 
 type TCX struct {
@@ -16,7 +18,7 @@ type TCX struct {
 
 type Activity struct {
 	Sport  string    `xml:"Sport,attr"`
-	Id     time.Time `xml:"Id"`
+	ID     time.Time `xml:"Id"`
 	Laps   []Lap     `xml:"Lap"`
 	Device string    `xml:"Creator>Name"`
 }
@@ -34,11 +36,11 @@ type Lap struct {
 type Trackpoint struct {
 	Time           time.Time `xml:"Time"`
 	Position       *Position `xml:"Position"`
-	AltitudeMeters float64   `xml:"AltitudeMeters"`
+	AltitudeMeters *float64  `xml:"AltitudeMeters"`
 	DistanceMeters float64   `xml:"DistanceMeters"`
-	HR             int       `xml:"HeartRateBpm>Value"`
+	HR             *int      `xml:"HeartRateBpm>Value"`
 	Speed          float64   `xml:"Extensions>TPX>Speed"`
-	Cadence        int       `xml:"Extensions>TPX>RunCadence"`
+	Cadence        *int      `xml:"Extensions>TPX>RunCadence"`
 }
 
 type Position struct {
@@ -82,4 +84,43 @@ func ParseAllFiles(dir string) ([]*TCX, error) {
 		tcxList = append(tcxList, tcx)
 	}
 	return tcxList, nil
+}
+
+func (t *TCX) ToActivities() []model.Activity {
+	var activities []model.Activity
+
+	for _, a := range t.Activities {
+		activity := model.Activity{
+			Source:     "Garmin TCX",
+			ExternalID: a.ID.UTC().Format(time.RFC3339),
+			Sport:      a.Sport,
+			StartTime:  a.ID.UTC(),
+		}
+		for _, l := range a.Laps {
+			activity.DistanceMeters += l.DistanceMeters
+			activity.DurationSeconds += l.TotalTimeSeconds
+
+			for _, tp := range l.Trackpoints {
+				activity.Points = append(activity.Points, tp.toPoint())
+			}
+		}
+		activities = append(activities, activity)
+	}
+
+	return activities
+}
+
+func (tp Trackpoint) toPoint() model.Point {
+	p := model.Point{
+		Time:           tp.Time.UTC(),
+		AltitudeMeters: tp.AltitudeMeters,
+		HR:             tp.HR,
+		Cadence:        tp.Cadence,
+	}
+
+	if tp.Position != nil {
+		p.Position = &model.Position{Lat: tp.Position.Lat, Lon: tp.Position.Lon}
+	}
+
+	return p
 }
