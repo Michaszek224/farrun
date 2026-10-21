@@ -1,9 +1,8 @@
-package main
+package source
 
 import (
 	"encoding/xml"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -47,7 +46,7 @@ type Position struct {
 	Lon float64 `xml:"LongitudeDegrees"`
 }
 
-func ParseTCX(path string) (*TCX, error) {
+func parseTCX(path string) (*TCX, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", path, err)
@@ -75,7 +74,7 @@ func ParseAllFiles(dir string) ([]*TCX, error) {
 			continue
 		}
 
-		tcx, err := ParseTCX(filepath.Join(dir, e.Name()))
+		tcx, err := parseTCX(filepath.Join(dir, e.Name()))
 		if err != nil {
 			return nil, err
 		}
@@ -83,29 +82,4 @@ func ParseAllFiles(dir string) ([]*TCX, error) {
 		tcxList = append(tcxList, tcx)
 	}
 	return tcxList, nil
-}
-
-func main() {
-	tcxList, err := ParseAllFiles("activities")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	loc, err := time.LoadLocation("Europe/Warsaw")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for _, tcx := range tcxList {
-		for _, a := range tcx.Activities {
-			totalDistance := 0.0
-			totalSeconds := 0.0
-			for _, l := range a.Laps {
-				totalDistance += l.DistanceMeters
-				totalSeconds += l.TotalTimeSeconds
-			}
-			secs := int(totalSeconds)
-			fmt.Printf("%s %s: %.0fm, %dm:%ds\n", a.Sport, a.Id.In(loc).Format(time.DateOnly), totalDistance, secs/60, secs%60)
-		}
-	}
 }
