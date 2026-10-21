@@ -19,6 +19,10 @@ Put your `.tcx` files in `activities/` and run:
 
     go run ./cmd/farrun
 
+Or you can just use anon data:
+
+    go run ./cmd/farrun --anon
+
 Needs Go 1.20 or newer.
 
 ## Notes

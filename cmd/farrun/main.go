@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"time"
@@ -9,7 +10,15 @@ import (
 )
 
 func main() {
-	tcxList, err := source.ParseAllFiles("activities")
+	anon := flag.Bool("anon", false, "read annoymized files from annonActivities")
+	flag.Parse()
+
+	dir := "activities"
+	if *anon {
+		dir = "anonActivities"
+	}
+
+	tcxList, err := source.ParseAllFiles(dir)
 	if err != nil {
 		log.Fatal(err)
 	}
