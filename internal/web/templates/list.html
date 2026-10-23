@@ -12,22 +12,22 @@
       <thead>
         <tr>
           <th><span class="visually-hidden">Select</span></th>
-          <th>Date</th>
-          <th>Sport</th>
-          <th class="num">Distance (km)</th>
-          <th class="num">Time</th>
-          <th class="num">Pace (/km)</th>
+          <th data-sort-key="date">Date</th>
+          <th data-sort-key="sport">Sport</th>
+          <th class="num" data-sort-key="distance">Distance (km)</th>
+          <th class="num" data-sort-key="time">Time</th>
+          <th class="num" data-sort-key="pace">Pace (/km)</th>
         </tr>
       </thead>
       <tbody>
         {{range .Rows}}
         <tr>
           <td><input type="checkbox" name="id" value="{{.ID}}" aria-label="Select {{date .Start}}"></td>
-          <td><a href="/activities/{{.ID}}">{{date .Start}}</a></td>
-          <td>{{.Sport}}</td>
-          <td class="num">{{km .Distance}}</td>
-          <td class="num">{{duration .Duration}}</td>
-          <td class="num">{{if .HasPace}}{{pace .Pace}}{{else}}–{{end}}</td>
+          <td data-sort="{{.Start.Unix}}"><a href="/activities/{{.ID}}">{{date .Start}}</a></td>
+          <td data-sort="{{.Sport}}">{{.Sport}}</td>
+          <td class="num" data-sort="{{num .Distance}}">{{km .Distance}}</td>
+          <td class="num" data-sort="{{num .Duration}}">{{duration .Duration}}</td>
+          <td class="num" data-sort="{{if .HasPace}}{{num .Pace}}{{end}}">{{if .HasPace}}{{pace .Pace}}{{else}}–{{end}}</td>
         </tr>
         {{end}}
       </tbody>
@@ -40,6 +40,7 @@
   </div>
 </form>
 <script src="/static/list.js" defer></script>
+<script src="/static/sort.js" defer></script>
 {{else}}
 <p class="empty">No activities yet. Import your <code>.tcx</code> files with <code>farrun import</code> and reload.</p>
 {{end}}

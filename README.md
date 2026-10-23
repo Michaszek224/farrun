@@ -30,8 +30,10 @@ Needs Go 1.27 or newer.
 
 ## The web UI
 
-- **Activities** (`/activities`): all runs with date, distance, time and pace. Tick two or
-  more runs and press *Compare selected*.
+- **Activities** (`/activities`): all runs with date, distance, time and pace. Click a
+  column header to sort: the first click puts the newest, longest or fastest first (A to Z
+  for sport), the next one reverses it. Tick two or more runs and press *Compare selected*;
+  your ticks stay while you sort.
 - **Run details** (`/activities/{id}`): distance, time, average pace, heart rate,
   elevation gain, a table of laps, and charts of pace, heart rate, altitude and cadence
   over distance.

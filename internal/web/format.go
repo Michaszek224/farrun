@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"math"
+	"strconv"
 	"time"
 )
 
@@ -13,6 +14,7 @@ func (s *server) funcs() template.FuncMap {
 		"km":       formatKm,
 		"duration": formatDuration,
 		"pace":     formatPace,
+		"num":      formatNum,
 	}
 }
 
@@ -34,4 +36,10 @@ func formatDuration(seconds float64) string {
 func formatPace(secPerKm float64) string {
 	total := int(math.Round(secPerKm))
 	return fmt.Sprintf("%d:%02d", total/60, total%60)
+}
+
+// formatNum renders a float as a plain decimal for data-sort attributes. The
+// default %v would switch to exponent notation (1e+06) for large values.
+func formatNum(v float64) string {
+	return strconv.FormatFloat(v, 'f', -1, 64)
 }

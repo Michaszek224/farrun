@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -190,6 +191,76 @@ func TestFormatting(t *testing.T) {
 	} {
 		if tc.got != tc.want {
 			t.Errorf("got %q, want %q", tc.got, tc.want)
+		}
+	}
+}
+
+func TestListIsSortable(t *testing.T) {
+	h := newTestHandler(t,
+		sampleRun("normal", time.Date(2026, 10, 20, 5, 30, 0, 0, time.UTC), 10000, 3725),
+		sampleRun("no-distance", time.Date(2026, 10, 19, 5, 30, 0, 0, time.UTC), 0, 60),
+		sampleRun("long", time.Date(2026, 10, 18, 5, 30, 0, 0, time.UTC), 1500000, 5400000),
+	)
+
+	_, body := get(t, h, "/activities")
+
+	for _, key := range []string{"date", "sport", "distance", "time", "pace"} {
+		if !strings.Contains(body, `data-sort-key="`+key+`"`) {
+			t.Errorf("no sortable header for %q", key)
+		}
+	}
+
+	for _, want := range []string{
+		fmt.Sprintf(`data-sort="%d"`, time.Date(2026, 10, 20, 5, 30, 0, 0, time.UTC).Unix()), // date: unix seconds
+		`data-sort="Running"`,
+		`data-sort="10000"`,   // distance in meters
+		`data-sort="3725"`,    // time in seconds
+		`data-sort="372.5"`,   // pace in seconds per km
+		`data-sort="1500000"`, // large values stay plain decimals...
+		`data-sort="5400000"`, // ...never 1.5e+06, which would still parse but is fragile
+		`<script src="/static/sort.js"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("list page missing %q", want)
+		}
+	}
+	if strings.Contains(body, "e+0") {
+		t.Error("a sort value is in exponent notation")
+	}
+
+	// A run without distance has no pace: its pace cell has an empty sort value,
+	// which the script sorts last in either direction.
+	if !strings.Contains(body, `data-sort="">–</td>`) {
+		t.Error("run without distance should have an empty pace sort value")
+	}
+}
+
+func TestListSortAsset(t *testing.T) {
+	res, js := get(t, newTestHandler(t), "/static/sort.js")
+	if res.StatusCode != http.StatusOK || !strings.Contains(js, "data-sort-key") {
+		t.Errorf("GET /static/sort.js = %d, want the script", res.StatusCode)
+	}
+}
+
+func TestListWithoutRunsHasNoSortScript(t *testing.T) {
+	_, body := get(t, newTestHandler(t), "/activities")
+	if strings.Contains(body, "sort.js") {
+		t.Error("the empty state should not load the sort script")
+	}
+}
+
+func TestFormatNum(t *testing.T) {
+	for in, want := range map[float64]string{
+		0:          "0",
+		786.03:     "786.03",
+		372.5:      "372.5",
+		10000:      "10000",
+		1500000:    "1500000",
+		0.000001:   "0.000001",
+		1234567.25: "1234567.25",
+	} {
+		if got := formatNum(in); got != want {
+			t.Errorf("formatNum(%v) = %q, want %q", in, got, want)
 		}
 	}
 }
