@@ -117,6 +117,12 @@ database is opened. Migrations live in `internal/store/migrations`.
 
     go test -race ./...
 
+## For contributors
+
+`CONTEXT.md` has the background: how the code fits together, the rules behind the data cleanup
+and the query language, the lessons learned along the way, and the plan for showing runs on
+maps. Read it before changing things.
+
 ## Notes
 
 The `activities` folder is gitignored, because the files contain GPS tracks.
