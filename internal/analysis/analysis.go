@@ -3,6 +3,9 @@
 package analysis
 
 import (
+	"math"
+	"sort"
+
 	"github.com/michaszek224/farrun/internal/model"
 )
 
@@ -11,6 +14,26 @@ import (
 // the pace axis to absurd values at every start, stop and traffic light.
 // Walking (about 10-12 min/km) is well above it and is still shown.
 const minMovingSpeed = 1.0
+
+// rampUpSeconds is how long after standing still a speed reading is ignored.
+// Moving off from a standstill is acceleration, not pace: the first sample of a
+// run is often 10:30/km on the way to 7:00/km, and showing it would stretch the
+// pace axis to fit a number that means nothing.
+const rampUpSeconds = 5.0
+
+// Sensors glitch: a watch may report a cadence of 116 for one sample in a run
+// that sits at 80, and one such point stretches a chart's axis until the real
+// data is a flat line. A sample is a spike, and dropped, when it is further from
+// the median of its neighbours than both the noise of those neighbours and a
+// minimum that real changes of that metric stay under (spikeFloor*).
+const (
+	spikeHalfWindow = 5 // neighbours looked at on each side
+	spikeMADs       = 3 // how many (scaled) median absolute deviations count as a spike
+
+	spikeFloorCadence = 20.0 // steps per minute
+	spikeFloorHR      = 25.0 // beats per minute
+	spikeFloorSpeed   = 1.5  // meters per second
+)
 
 // elevationThreshold is how far the altitude must move before it counts as a
 // climb or descent. Barometric altitude jitters by a few tenths of a meter, and
@@ -117,6 +140,11 @@ func Series(points []model.Point, maxPoints int) []SeriesPoint {
 		}
 	}
 
+	// Ramp-up first: it needs the raw zeros that mark a standstill, which the
+	// spike filter would remove from a short stop as if it were a glitch.
+	dropRampUp(samples)
+	despike(samples)
+
 	size := (len(samples) + maxPoints - 1) / maxPoints // bucket size, rounded up
 	out := make([]SeriesPoint, 0, (len(samples)+size-1)/size)
 	for start := 0; start < len(samples); start += size {
@@ -131,6 +159,95 @@ type sample struct {
 	speed             *float64
 	hr, altitude      *float64
 	cadence           *float64
+}
+
+// dropRampUp clears the speed of samples that follow a standstill too closely.
+func dropRampUp(samples []sample) {
+	lastStill, stood := 0.0, false
+	for i := range samples {
+		s := &samples[i]
+		if s.speed == nil {
+			continue
+		}
+		if *s.speed < minMovingSpeed {
+			lastStill, stood = s.elapsed, true
+			continue
+		}
+		if stood && s.elapsed-lastStill < rampUpSeconds {
+			s.speed = nil
+		}
+	}
+}
+
+// despike removes isolated glitches from the metrics that are prone to them.
+// It only looks at runs of samples shorter than the window, so a sustained
+// change (a walking break, a heart rate ramp) is never touched.
+func despike(samples []sample) {
+	cadence := make([]*float64, len(samples))
+	hr := make([]*float64, len(samples))
+	speed := make([]*float64, len(samples))
+	for i, s := range samples {
+		cadence[i], hr[i], speed[i] = s.cadence, s.hr, s.speed
+	}
+
+	cadence = withoutSpikes(cadence, spikeFloorCadence)
+	hr = withoutSpikes(hr, spikeFloorHR)
+	speed = withoutSpikes(speed, spikeFloorSpeed)
+
+	for i := range samples {
+		samples[i].cadence, samples[i].hr, samples[i].speed = cadence[i], hr[i], speed[i]
+	}
+}
+
+// withoutSpikes returns a copy of values where every spike is nil. A value is a
+// spike when it differs from the median of its window by more than both
+// spikeMADs scaled MADs and floor. The floor stops a perfectly steady run
+// (MAD 0) from having every 1-step wobble flagged.
+func withoutSpikes(values []*float64, floor float64) []*float64 {
+	out := make([]*float64, len(values))
+	copy(out, values)
+
+	window := make([]float64, 0, 2*spikeHalfWindow+1)
+	deviations := make([]float64, 0, 2*spikeHalfWindow+1)
+
+	for i, v := range values {
+		if v == nil {
+			continue
+		}
+
+		window = window[:0]
+		for j := max(0, i-spikeHalfWindow); j <= min(len(values)-1, i+spikeHalfWindow); j++ {
+			if values[j] != nil {
+				window = append(window, *values[j])
+			}
+		}
+		if len(window) < 3 {
+			continue // too little context to call anything a spike
+		}
+
+		med := median(window)
+		deviations = deviations[:0]
+		for _, w := range window {
+			deviations = append(deviations, math.Abs(w-med))
+		}
+		// 1.4826 scales the MAD to match a standard deviation for normal noise.
+		limit := max(spikeMADs*1.4826*median(deviations), floor)
+
+		if math.Abs(*v-med) > limit {
+			out[i] = nil
+		}
+	}
+	return out
+}
+
+// median sorts its argument.
+func median(xs []float64) float64 {
+	sort.Float64s(xs)
+	mid := len(xs) / 2
+	if len(xs)%2 == 1 {
+		return xs[mid]
+	}
+	return (xs[mid-1] + xs[mid]) / 2
 }
 
 func average(bucket []sample) SeriesPoint {

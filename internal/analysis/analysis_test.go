@@ -239,3 +239,208 @@ func TestSeriesCadenceZeroMeansNoData(t *testing.T) {
 		t.Errorf("bucket cadence = %v, want 82 (the zero is ignored)", one[0].Cadence)
 	}
 }
+
+// seriesOf builds one point per second from per-sample cadence, heart rate and
+// speed (a nil slice leaves that metric empty), and returns the unaveraged series.
+func seriesOf(cadence []int, hr []int, speed []float64) []SeriesPoint {
+	n := max(len(cadence), len(hr), len(speed))
+	start := time.Date(2026, 10, 20, 6, 30, 0, 0, time.UTC)
+
+	points := make([]model.Point, n)
+	for i := range points {
+		points[i] = model.Point{Time: start.Add(time.Duration(i) * time.Second), DistanceMeters: ptr(float64(i) * 3)}
+		if cadence != nil {
+			points[i].Cadence = ptr(cadence[i])
+		}
+		if hr != nil {
+			points[i].HR = ptr(hr[i])
+		}
+		if speed != nil {
+			points[i].SpeedMPS = ptr(speed[i])
+		}
+	}
+	return Series(points, n)
+}
+
+func repeat[T any](v T, n int) []T {
+	out := make([]T, n)
+	for i := range out {
+		out[i] = v
+	}
+	return out
+}
+
+func TestSeriesDropsIsolatedSpikes(t *testing.T) {
+	cadence := repeat(80, 30)
+	cadence[2] = 116 // the glitch seen at the start of a real run
+	cadence[20] = 30
+
+	hr := repeat(150, 30)
+	hr[10] = 220 // strap dropout
+
+	speed := repeat(3.0, 30)
+	speed[15] = 9.0 // GPS jump
+
+	got := seriesOf(cadence, hr, speed)
+
+	if got[2].Cadence != nil || got[20].Cadence != nil {
+		t.Errorf("cadence spikes kept: %v, %v", got[2].Cadence, got[20].Cadence)
+	}
+	if got[10].HR != nil {
+		t.Errorf("heart rate spike kept: %v", *got[10].HR)
+	}
+	if got[15].PaceSecPerKm != nil {
+		t.Errorf("speed spike kept as pace %v", *got[15].PaceSecPerKm)
+	}
+
+	// Everything around the spikes is untouched.
+	for _, i := range []int{1, 3, 19, 21} {
+		if got[i].Cadence == nil || !near(*got[i].Cadence, 80) {
+			t.Errorf("cadence at %d = %v, want 80", i, got[i].Cadence)
+		}
+	}
+	if got[9].HR == nil || got[11].HR == nil || got[14].PaceSecPerKm == nil || got[16].PaceSecPerKm == nil {
+		t.Error("neighbours of a spike were dropped too")
+	}
+}
+
+func TestSeriesKeepsSustainedChanges(t *testing.T) {
+	// 10 samples of walking cadence in the middle of a run: a real change.
+	cadence := repeat(80, 40)
+	for i := 15; i < 25; i++ {
+		cadence[i] = 56
+	}
+	// Heart rate climbing 20 bpm per 5 samples, like an interval start.
+	hr := make([]int, 40)
+	for i := range hr {
+		hr[i] = 100 + i*4
+	}
+	// Running, then walking for 10 samples.
+	speed := repeat(3.0, 40)
+	for i := 15; i < 25; i++ {
+		speed[i] = 1.4
+	}
+
+	got := seriesOf(cadence, hr, speed)
+
+	for i := range got {
+		if got[i].Cadence == nil {
+			t.Errorf("cadence at %d dropped, but the change lasts 10 samples", i)
+		}
+		if got[i].HR == nil {
+			t.Errorf("heart rate at %d dropped, but it is a steady climb", i)
+		}
+		if got[i].PaceSecPerKm == nil {
+			t.Errorf("pace at %d dropped, but walking is real data", i)
+		}
+	}
+	if *got[20].Cadence != 56 || !near(*got[20].PaceSecPerKm, 1000/1.4) {
+		t.Errorf("walking values changed: cadence %v, pace %v", *got[20].Cadence, *got[20].PaceSecPerKm)
+	}
+}
+
+func TestSeriesSteadyDataIsNotMistakenForSpikes(t *testing.T) {
+	// A steady run has MAD 0, so without a floor every 1-step wobble would be flagged.
+	cadence := []int{80, 80, 81, 80, 80, 79, 80, 80, 81, 80, 80, 80}
+	hr := []int{150, 150, 151, 150, 150, 149, 150, 150, 151, 150, 150, 150}
+
+	got := seriesOf(cadence, hr, nil)
+	for i := range got {
+		if got[i].Cadence == nil || got[i].HR == nil {
+			t.Errorf("sample %d of a steady run was dropped", i)
+		}
+	}
+}
+
+func TestSeriesSpikeAtTheEdges(t *testing.T) {
+	cadence := repeat(80, 20)
+	cadence[0] = 130
+	cadence[19] = 130
+
+	got := seriesOf(cadence, nil, nil)
+	if got[0].Cadence != nil || got[19].Cadence != nil {
+		t.Errorf("spikes on the first/last sample kept: %v, %v", got[0].Cadence, got[19].Cadence)
+	}
+}
+
+func TestSeriesTooShortToJudge(t *testing.T) {
+	// With two samples there is no context, so nothing may be dropped.
+	got := seriesOf([]int{80, 130}, nil, nil)
+	if got[0].Cadence == nil || got[1].Cadence == nil {
+		t.Error("samples were dropped without enough context")
+	}
+}
+
+func TestWithoutSpikesDoesNotModifyItsInput(t *testing.T) {
+	in := []*float64{ptr(80.0), ptr(80.0), ptr(130.0), ptr(80.0), ptr(80.0)}
+	out := withoutSpikes(in, 20)
+
+	if in[2] == nil || *in[2] != 130 {
+		t.Error("input slice was modified")
+	}
+	if out[2] != nil {
+		t.Errorf("spike kept in output: %v", *out[2])
+	}
+}
+
+func TestSeriesIgnoresPaceWhileAcceleratingFromAStop(t *testing.T) {
+	// Standing still for 3 s, then pulling away: 1.6, 2.3, 2.3 ... m/s.
+	speed := []float64{0, 0, 0, 1.6, 2.3, 2.3, 2.3, 2.3, 2.3, 2.3, 2.3, 2.3}
+	got := seriesOf(nil, nil, speed)
+
+	// Still at t=2 s, so samples before t=7 s are acceleration.
+	for i := 0; i <= 6; i++ {
+		if got[i].PaceSecPerKm != nil {
+			t.Errorf("sample %d (t=%ds) has pace %v, want none while accelerating", i, i, *got[i].PaceSecPerKm)
+		}
+	}
+	for i := 7; i < len(got); i++ {
+		if got[i].PaceSecPerKm == nil || !near(*got[i].PaceSecPerKm, 1000/2.3) {
+			t.Errorf("sample %d pace = %v, want %v", i, got[i].PaceSecPerKm, 1000/2.3)
+		}
+	}
+}
+
+func TestSeriesRampUpAfterAStopMidRun(t *testing.T) {
+	// Running, stopped for 3 s, running again.
+	speed := []float64{3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3}
+	got := seriesOf(nil, nil, speed)
+
+	for i := 0; i < 8; i++ {
+		if got[i].PaceSecPerKm == nil {
+			t.Errorf("sample %d: pace dropped although the run had not stopped yet", i)
+		}
+	}
+	// Last still sample is index 10; pace is back from index 15 on.
+	for i := 11; i <= 14; i++ {
+		if got[i].PaceSecPerKm != nil {
+			t.Errorf("sample %d: pace shown %ds after a stop, want none", i, i-10)
+		}
+	}
+	if got[15].PaceSecPerKm == nil {
+		t.Error("pace did not come back 5 s after the stop")
+	}
+}
+
+func TestSeriesRampUpOnlyAffectsPace(t *testing.T) {
+	speed := []float64{0, 0, 1.6, 2.3, 2.3, 2.3}
+	hr := []int{100, 105, 110, 115, 120, 125}
+	cadence := []int{0, 0, 70, 78, 80, 80}
+
+	got := seriesOf(cadence, hr, speed)
+	if got[2].HR == nil || got[3].HR == nil {
+		t.Error("heart rate was dropped during ramp-up")
+	}
+	if got[2].Cadence == nil || got[3].Cadence == nil {
+		t.Error("cadence was dropped during ramp-up")
+	}
+}
+
+func TestSeriesWithoutAStandstillKeepsAllPace(t *testing.T) {
+	got := seriesOf(nil, nil, repeat(3.0, 10))
+	for i, p := range got {
+		if p.PaceSecPerKm == nil {
+			t.Errorf("sample %d: pace dropped although the run never stood still", i)
+		}
+	}
+}
