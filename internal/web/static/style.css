@@ -84,3 +84,40 @@ tbody tr:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); 
 th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
 
 .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+h2 { font-size: 1.2rem; margin: 2rem 0 0.75rem; }
+
+.crumbs { margin: 0 0 0.75rem; font-size: 0.9rem; }
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.75rem;
+  margin: 1.25rem 0 0;
+}
+
+.stats > div {
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.stats dt { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.stats dd { margin: 0.1rem 0 0; font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stats small { font-size: 0.8rem; font-weight: 400; color: var(--muted); }
+
+.charts { margin-top: 1.5rem; }
+
+.charts figure {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.charts figcaption { font-weight: 600; margin-bottom: 0.5rem; }
+
+/* Chart.js sizes the canvas to this box. */
+.chart-box { position: relative; height: 16rem; }

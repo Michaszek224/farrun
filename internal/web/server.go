@@ -18,7 +18,7 @@ import (
 var assets embed.FS
 
 // pageNames are the templates in templates/, each combined with layout.html.
-var pageNames = []string{"list"}
+var pageNames = []string{"list", "detail", "error"}
 
 type server struct {
 	store *store.Store
@@ -48,6 +48,8 @@ func NewHandler(st *store.Store, loc *time.Location) (http.Handler, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.handleRoot)
 	mux.HandleFunc("GET /activities", s.handleList)
+	mux.HandleFunc("GET /activities/{id}", s.handleDetail)
+	mux.HandleFunc("GET /api/activities/{id}/series", s.handleSeries)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
 
 	return secure(mux), nil
@@ -79,8 +81,21 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, page string, sta
 }
 
 func (s *server) serverError(w http.ResponseWriter, r *http.Request, err error) {
-	slog.Error("request failed", "method", r.Method, "path", r.URL.Path, "error", err)
+	slogError(r, err)
 	http.Error(w, "internal server error", http.StatusInternalServerError)
+}
+
+func slogError(r *http.Request, err error) {
+	slog.Error("request failed", "method", r.Method, "path", r.URL.Path, "error", err)
+}
+
+// errorPage shows a friendly message in the normal layout.
+func (s *server) errorPage(w http.ResponseWriter, r *http.Request, status int, message string) {
+	s.render(w, r, "error", status, map[string]any{
+		"Status":  status,
+		"Title":   http.StatusText(status),
+		"Message": message,
+	})
 }
 
 func (s *server) handleRoot(w http.ResponseWriter, r *http.Request) {

@@ -1,0 +1,62 @@
+{{define "title"}}{{date .Start}}{{end}}
+
+{{define "content"}}
+<p class="crumbs"><a href="/activities">← All activities</a></p>
+<h1>{{date .Start}}</h1>
+<p class="muted">{{.Sport}}{{if .Device}} · {{.Device}}{{end}}</p>
+
+<dl class="stats">
+  <div><dt>Distance</dt><dd>{{km .Distance}} <small>km</small></dd></div>
+  <div><dt>Time</dt><dd>{{duration .Duration}}</dd></div>
+  <div><dt>Avg pace</dt><dd>{{.Pace}} <small>/km</small></dd></div>
+  <div><dt>Avg heart rate</dt><dd>{{.AvgHR}} <small>bpm</small></dd></div>
+  <div><dt>Max heart rate</dt><dd>{{.MaxHR}} <small>bpm</small></dd></div>
+  <div><dt>Elevation gain</dt><dd>{{.ElevationGain}} <small>m</small></dd></div>
+</dl>
+
+<section class="charts" data-charts>
+  <ul hidden>
+    <li data-series-url="{{.SeriesURL}}" data-label="{{.Label}}"></li>
+  </ul>
+  <p class="muted" data-charts-status>Loading charts…</p>
+  <figure hidden><figcaption>Pace</figcaption><div class="chart-box"><canvas data-metric="pace"></canvas></div></figure>
+  <figure hidden><figcaption>Heart rate</figcaption><div class="chart-box"><canvas data-metric="hr"></canvas></div></figure>
+  <figure hidden><figcaption>Altitude</figcaption><div class="chart-box"><canvas data-metric="altitude"></canvas></div></figure>
+  <figure hidden><figcaption>Cadence</figcaption><div class="chart-box"><canvas data-metric="cadence"></canvas></div></figure>
+</section>
+
+{{if .Laps}}
+<h2>Laps</h2>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th class="num">#</th>
+        <th class="num">Distance (km)</th>
+        <th class="num">Time</th>
+        <th class="num">Pace (/km)</th>
+        <th class="num">Avg HR</th>
+        <th class="num">Max HR</th>
+        <th class="num">Calories</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Laps}}
+      <tr>
+        <td class="num">{{.Number}}</td>
+        <td class="num">{{km .Distance}}</td>
+        <td class="num">{{duration .Duration}}</td>
+        <td class="num">{{.Pace}}</td>
+        <td class="num">{{.AvgHR}}</td>
+        <td class="num">{{.MaxHR}}</td>
+        <td class="num">{{.Calories}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}
+
+<script src="/static/chart.umd.js" defer></script>
+<script src="/static/charts.js" defer></script>
+{{end}}
