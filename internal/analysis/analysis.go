@@ -6,9 +6,11 @@ import (
 	"github.com/michaszek224/farrun/internal/model"
 )
 
-// minMovingSpeed (m/s, about 33 min/km) separates running from standing still.
-// Slower samples have no meaningful pace.
-const minMovingSpeed = 0.5
+// minMovingSpeed (m/s, about 16:40 min/km) separates moving from standing
+// still. Slower samples have no meaningful pace, and plotting them would stretch
+// the pace axis to absurd values at every start, stop and traffic light.
+// Walking (about 10-12 min/km) is well above it and is still shown.
+const minMovingSpeed = 1.0
 
 // elevationThreshold is how far the altitude must move before it counts as a
 // climb or descent. Barometric altitude jitters by a few tenths of a meter, and
@@ -111,7 +113,7 @@ func Series(points []model.Point, maxPoints int) []SeriesPoint {
 			speed:    p.SpeedMPS,
 			hr:       toFloat(p.HR),
 			altitude: p.AltitudeMeters,
-			cadence:  toFloat(p.Cadence),
+			cadence:  cadence(p.Cadence),
 		}
 	}
 
@@ -178,6 +180,15 @@ func (m *mean) value() *float64 {
 	}
 	v := m.sum / float64(m.n)
 	return &v
+}
+
+// cadence treats 0 as "no data": watches report 0 while you stand still, and
+// those samples would drag the chart's axis down to zero and flatten the line.
+func cadence(v *int) *float64 {
+	if v == nil || *v <= 0 {
+		return nil
+	}
+	return toFloat(v)
 }
 
 func toFloat(v *int) *float64 {

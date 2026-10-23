@@ -15,25 +15,26 @@
 
   const METRICS = {
     pace:     { field: 'paceSecPerKm',   unit: 'min/km', format: minSec, reverse: true },
-    hr:       { field: 'hr',             unit: 'bpm',    format: (v) => String(Math.round(v)) },
+    hr:       { field: 'hr',             unit: 'bpm',    format: (v) => String(Math.round(v)), whole: true },
     altitude: { field: 'altitudeMeters', unit: 'm',      format: (v) => v.toFixed(1) },
-    cadence:  { field: 'cadence',        unit: 'spm',    format: (v) => String(Math.round(v)) },
+    cadence:  { field: 'cadence',        unit: 'spm',    format: (v) => String(Math.round(v)), whole: true },
   };
 
   const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const seriesColor = (i) => cssVar(`--series-${i % SERIES_COLORS}`);
 
-  // Slow starts and stops give extreme paces that would squash the chart, so
-  // the pace axis follows the bulk of the data: the 2nd to 98th percentile,
-  // but never further than 35% slower or 30% faster than the median pace.
-  const paceRange = (values) => {
-    const sorted = values.slice().sort((a, b) => a - b);
-    const at = (q) => sorted[Math.round((sorted.length - 1) * q)];
-    const median = at(0.5);
-    const lo = Math.max(at(0.02), median * 0.7);
-    const hi = Math.min(at(0.98), median * 1.35);
-    const pad = (hi - lo) * 0.05 || 1;
-    return { min: lo - pad, max: hi + pad };
+  // Pace in seconds per km: contain every value, with tick steps that read as
+  // clock times (5:00, 5:30, ...) instead of whatever Chart.js happens to pick.
+  const PACE_STEPS = [5, 10, 15, 30, 60, 120, 300];
+  const paceAxis = (values) => {
+    const lo = Math.min(...values);
+    const hi = Math.max(...values);
+    const step = PACE_STEPS.find((st) => (hi - lo) / st <= 8) || PACE_STEPS[PACE_STEPS.length - 1];
+    return {
+      min: Math.floor(lo / step) * step - (lo === hi ? step : 0),
+      max: Math.ceil(hi / step) * step + (lo === hi ? step : 0),
+      ticks: { stepSize: step },
+    };
   };
 
   const fetchRun = async (item) => {
@@ -62,8 +63,22 @@
     const values = datasets.flatMap((d) => d.data.map((p) => p.y)).filter((y) => y !== null);
     if (values.length === 0) return false; // nothing recorded for this metric
 
-    const y = { reverse: !!metric.reverse, ticks: { callback: (v) => metric.format(v) }, grid: { color: cssVar('--line') } };
-    if (canvas.dataset.metric === 'pace') Object.assign(y, paceRange(values));
+    // Whole-number metrics need whole-number ticks, or a narrow range such as
+    // 75-80 gets half-steps that round to repeated labels (80, 80, 79, 79).
+    const y = {
+      reverse: !!metric.reverse,
+      ticks: { callback: (v) => metric.format(v), ...(metric.whole ? { precision: 0 } : {}) },
+      grid: { color: cssVar('--line') },
+    };
+    if (canvas.dataset.metric === 'pace') {
+      const axis = paceAxis(values);
+      Object.assign(y, axis, { ticks: { ...y.ticks, ...axis.ticks } });
+    }
+
+    // Every chart shares the same x range: from the start to the end of the
+    // longest run. Left to itself, Chart.js sizes each axis from the points it
+    // happens to plot, so a metric with gaps near the end would stop short.
+    const endKm = Math.max(0, ...datasets.map((d) => (d.data.length ? d.data[d.data.length - 1].x : 0)));
 
     new Chart(canvas, {
       type: 'line',
@@ -74,7 +89,7 @@
         maintainAspectRatio: false,
         interaction: { mode: 'nearest', axis: 'x', intersect: false },
         scales: {
-          x: { type: 'linear', title: { display: true, text: 'Distance (km)' }, grid: { color: cssVar('--line') } },
+          x: { type: 'linear', min: 0, max: endKm, title: { display: true, text: 'Distance (km)' }, grid: { color: cssVar('--line') } },
           y,
         },
         plugins: {

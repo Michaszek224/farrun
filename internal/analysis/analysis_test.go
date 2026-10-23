@@ -186,3 +186,56 @@ func TestSeriesInvalidMax(t *testing.T) {
 		t.Errorf("Series(maxPoints=0) returned %d samples, want 1", len(got))
 	}
 }
+
+func TestSeriesPaceNeedsMovement(t *testing.T) {
+	start := time.Date(2026, 10, 20, 6, 30, 0, 0, time.UTC)
+
+	for _, tc := range []struct {
+		name    string
+		speed   float64
+		wantNil bool
+		want    float64
+	}{
+		{"standing still", 0, true, 0},
+		{"drifting at 0.9 m/s", 0.9, true, 0},
+		{"just moving, 1 m/s", 1.0, false, 1000},
+		{"slow walk, 1.4 m/s", 1.4, false, 1000 / 1.4},
+		{"running, 3 m/s", 3.0, false, 1000.0 / 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := Series([]model.Point{{Time: start, SpeedMPS: ptr(tc.speed)}}, 10)
+			if tc.wantNil {
+				if got[0].PaceSecPerKm != nil {
+					t.Errorf("pace = %v, want nil", *got[0].PaceSecPerKm)
+				}
+				return
+			}
+			if got[0].PaceSecPerKm == nil || !near(*got[0].PaceSecPerKm, tc.want) {
+				t.Errorf("pace = %v, want %v", got[0].PaceSecPerKm, tc.want)
+			}
+		})
+	}
+}
+
+func TestSeriesCadenceZeroMeansNoData(t *testing.T) {
+	start := time.Date(2026, 10, 20, 6, 30, 0, 0, time.UTC)
+	points := []model.Point{
+		{Time: start, Cadence: ptr(0)},
+		{Time: start.Add(time.Second), Cadence: ptr(80)},
+		{Time: start.Add(2 * time.Second), Cadence: ptr(84)},
+	}
+
+	got := Series(points, 10)
+	if got[0].Cadence != nil {
+		t.Errorf("cadence 0 = %v, want nil", *got[0].Cadence)
+	}
+	if got[1].Cadence == nil || !near(*got[1].Cadence, 80) {
+		t.Errorf("cadence 80 = %v", got[1].Cadence)
+	}
+
+	// Averaged into one bucket, the zero must not pull the mean down to 54.7.
+	one := Series(points, 1)
+	if one[0].Cadence == nil || !near(*one[0].Cadence, 82) {
+		t.Errorf("bucket cadence = %v, want 82 (the zero is ignored)", one[0].Cadence)
+	}
+}
