@@ -1,1 +1,6 @@
 activities/
+
+# Local SQLite database (and WAL side files)
+*.db
+*.db-shm
+*.db-wal
