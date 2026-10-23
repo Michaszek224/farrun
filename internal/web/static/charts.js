@@ -44,6 +44,23 @@
     return { label: item.dataset.label, points: body.points };
   };
 
+  // Neon: draw each line with a soft glow in its own color.
+  const glow = {
+    id: 'glow',
+    beforeDatasetDraw(chart, args) {
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.shadowColor = chart.data.datasets[args.index].borderColor;
+      ctx.shadowBlur = 8;
+    },
+    afterDatasetDraw(chart) {
+      chart.ctx.restore();
+    },
+  };
+
+  // Dotted grid lines: the scale's border.dash styles the grid in Chart.js 4.
+  const gridStyle = () => ({ grid: { color: cssVar('--grid') }, border: { dash: [2, 4], color: cssVar('--frame') } });
+
   const drawChart = (canvas, runs) => {
     const metric = METRICS[canvas.dataset.metric];
     if (!metric) return false;
@@ -53,7 +70,7 @@
       data: run.points.map((p) => ({ x: p.distanceMeters / 1000, y: p[metric.field] })),
       borderColor: seriesColor(i),
       backgroundColor: seriesColor(i),
-      borderWidth: 1.5,
+      borderWidth: 1.75,
       pointRadius: 0,
       pointHoverRadius: 3,
       tension: 0.25,
@@ -68,7 +85,7 @@
     const y = {
       reverse: !!metric.reverse,
       ticks: { callback: (v) => metric.format(v), ...(metric.whole ? { precision: 0 } : {}) },
-      grid: { color: cssVar('--line') },
+      ...gridStyle(),
     };
     if (canvas.dataset.metric === 'pace') {
       const axis = paceAxis(values);
@@ -82,6 +99,7 @@
 
     new Chart(canvas, {
       type: 'line',
+      plugins: [glow],
       data: { datasets },
       options: {
         parsing: false,
@@ -89,11 +107,12 @@
         maintainAspectRatio: false,
         interaction: { mode: 'nearest', axis: 'x', intersect: false },
         scales: {
-          x: { type: 'linear', min: 0, max: endKm, title: { display: true, text: 'Distance (km)' }, grid: { color: cssVar('--line') } },
+          x: { type: 'linear', min: 0, max: endKm, title: { display: true, text: 'Distance (km)' }, ...gridStyle() },
           y,
         },
         plugins: {
-          legend: { display: runs.length > 1 },
+          glow: {},
+          legend: { display: runs.length > 1, labels: { usePointStyle: true, pointStyle: 'rect', boxWidth: 8, boxHeight: 8 } },
           tooltip: {
             callbacks: {
               title: (items) => `${items[0].parsed.x.toFixed(2)} km`,
@@ -119,8 +138,22 @@
       return;
     }
 
+    // Canvas text does not re-render when a web font arrives late, so wait for it.
+    try { await document.fonts.load('11px "JetBrains Mono"'); } catch { /* fall back to the system font */ }
+
     Chart.defaults.color = cssVar('--muted');
     Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+    Chart.defaults.font.size = 11;
+    Chart.defaults.plugins.legend.labels.color = cssVar('--text');
+
+    const tip = Chart.defaults.plugins.tooltip; // square, dark, orange frame
+    tip.backgroundColor = cssVar('--surface');
+    tip.borderColor = cssVar('--accent');
+    tip.borderWidth = 1;
+    tip.titleColor = cssVar('--accent');
+    tip.bodyColor = cssVar('--text');
+    tip.cornerRadius = 0;
+    tip.boxPadding = 4;
 
     try {
       const items = [...section.querySelectorAll('[data-series-url]')];

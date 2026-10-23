@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"io/fs"
 	"log/slog"
+	"mime"
 	"net/http"
 	"time"
 
@@ -16,6 +17,12 @@ import (
 
 //go:embed templates static
 var assets embed.FS
+
+func init() {
+	// Go's built-in table has no .woff2, so without this the font would be
+	// served with whatever the host's /etc/mime.types says, or sniffed.
+	_ = mime.AddExtensionType(".woff2", "font/woff2")
+}
 
 // pageNames are the templates in templates/, each combined with layout.html.
 var pageNames = []string{"list", "detail", "compare", "error"}

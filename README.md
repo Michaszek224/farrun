@@ -44,7 +44,14 @@ Needs Go 1.27 or newer.
 
 The server listens on `127.0.0.1:8080` only, so nobody else on the network can see your
 runs. Change it with `--addr` (you get a warning if the address is not local). Nothing is
-loaded from other sites: Chart.js 4.4.7 (MIT) is bundled in `internal/web/static`.
+loaded from other sites: Chart.js 4.4.7 (MIT) and the JetBrains Mono font (SIL Open Font
+License 1.1, see `internal/web/static/fonts/OFL.txt`) are bundled in `internal/web/static`.
+
+The look is orange cyberpunk with a terminal feel: dark only, monospace, square frames with
+titles in the border, neon glow and faint scanlines. It is all in
+`internal/web/static/style.css`: the palette sits in `:root` at the top (`--accent`,
+`--cyan`, `--series-0` to `--series-5` for chart lines), and the glow and scanlines can be
+dialled down there too.
 
 ## Flags
 

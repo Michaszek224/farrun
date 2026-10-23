@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -261,6 +262,70 @@ func TestFormatNum(t *testing.T) {
 	} {
 		if got := formatNum(in); got != want {
 			t.Errorf("formatNum(%v) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestFontAssets(t *testing.T) {
+	h := newTestHandler(t)
+
+	for _, name := range []string{"JetBrainsMono-Regular.woff2", "JetBrainsMono-Bold.woff2"} {
+		res, body := get(t, h, "/static/fonts/"+name)
+		if res.StatusCode != http.StatusOK {
+			t.Errorf("GET %s = %d, want 200", name, res.StatusCode)
+		}
+		if ct := res.Header.Get("Content-Type"); ct != "font/woff2" {
+			t.Errorf("%s Content-Type = %q, want font/woff2", name, ct)
+		}
+		if !strings.HasPrefix(body, "wOF2") || len(body) < 50_000 {
+			t.Errorf("%s is not a woff2 font (%d bytes)", name, len(body))
+		}
+	}
+
+	// The font's licence has to ship with it.
+	res, body := get(t, h, "/static/fonts/OFL.txt")
+	if res.StatusCode != http.StatusOK || !strings.Contains(body, "SIL OPEN FONT LICENSE Version 1.1") {
+		t.Errorf("GET /static/fonts/OFL.txt = %d, want the SIL Open Font License", res.StatusCode)
+	}
+}
+
+// Every url(...) in the stylesheet must point at a file that is really served,
+// and nothing may point at another site.
+func TestStylesheetReferencesResolve(t *testing.T) {
+	h := newTestHandler(t)
+	_, css := get(t, h, "/static/style.css")
+
+	urls := regexp.MustCompile(`url\(["']?([^"')]+)["']?\)`).FindAllStringSubmatch(css, -1)
+	if len(urls) == 0 {
+		t.Fatal("stylesheet has no url(...) references; the @font-face rules are gone")
+	}
+	for _, m := range urls {
+		u := m[1]
+		if !strings.HasPrefix(u, "/static/") {
+			t.Errorf("stylesheet references %q, which is not served from /static/", u)
+			continue
+		}
+		if res, _ := get(t, h, u); res.StatusCode != http.StatusOK {
+			t.Errorf("stylesheet references %s, which returns %d", u, res.StatusCode)
+		}
+	}
+	if strings.Contains(css, "@import") || strings.Contains(css, "http://") || strings.Contains(css, "https://") {
+		t.Error("stylesheet loads something from another site")
+	}
+}
+
+func TestLayoutHasTagline(t *testing.T) {
+	_, body := get(t, newTestHandler(t), "/activities")
+	if !strings.Contains(body, `class="tagline"`) {
+		t.Error("layout is missing the header tagline")
+	}
+}
+
+func TestDetailStatLabelsFitTheirFrames(t *testing.T) {
+	_, body := get(t, newTestHandler(t, detailedRun("a", 3)), "/activities/1")
+	for _, label := range []string{"Distance", "Time", "Avg pace", "Avg HR", "Max HR", "Climb"} {
+		if !strings.Contains(body, "<dt>"+label+"</dt>") {
+			t.Errorf("detail page is missing the %q stat", label)
 		}
 	}
 }
