@@ -1,130 +1,40 @@
 # FarRun
 
-A (hopefully great, in the future) project to track and analyze my runs
-
-## What it does
-
-- Reads `.tcx` files exported from Garmin, stored in the `activities` folder :white_check_mark:
-- Stores the runs in a SQLite database :white_check_mark:
-- Shows them in a web UI: run list, run details with charts, compare runs :white_check_mark:
-- Route map :x:
-
-## Status
-
-Early days, but usable. Import your runs once, then browse them in the browser.
-The route map is next.
+Track and analyze your runs from Garmin `.tcx` exports, in a local terminal-style web UI.
 
 ## Running it
 
-Put your `.tcx` files in `activities/`, import them, then start the web UI:
+Needs Go 1.27 or newer. Put your `.tcx` files in `activities/`, then:
 
     go run ./cmd/farrun import
     go run ./cmd/farrun serve
 
-and open <http://127.0.0.1:8080>. No `.tcx` files handy? Try the anonymized demo data:
+Open <http://127.0.0.1:8080>. No `.tcx` files? Use the demo data instead:
 
     go run ./cmd/farrun import --anon
     go run ./cmd/farrun serve --anon
 
-Needs Go 1.27 or newer.
+## Runs list
 
-## The web UI
+Every run in a sortable table. Click a column header to sort, tick two or more runs and
+compare them, or type a filter such as `distance > 5km and pace < 6:20`.
 
-- **Activities** (`/activities`): all runs with date, distance, time and pace. Click a
-  column header to sort: the first click puts the newest, longest or fastest first (A to Z
-  for sport), the next one reverses it. Tick two or more runs and press *Compare selected*;
-  your ticks stay while you sort. The box on the right filters the runs with a small
-  SQL-like language (see below), and press `/` to jump to it.
-- **Run details** (`/activities/{id}`): distance, time, average pace, heart rate,
-  elevation gain, a table of laps, and charts of pace, heart rate, altitude and cadence
-  over distance.
-- **Compare** (`/compare?id=1&id=2`): the selected runs in one table, with their charts
-  overlaid by distance. Between 2 and 10 runs.
-- **JSON** (`/api/activities/{id}/series`): the chart data of one run, optionally limited
-  with `?points=N` (default 500, at most 2000).
+<img src="docs/screenshots/activities.png" alt="Runs list" width="820">
 
-The server listens on `127.0.0.1:8080` only, so nobody else on the network can see your
-runs. Change it with `--addr` (you get a warning if the address is not local). Nothing is
-loaded from other sites: Chart.js 4.4.7 (MIT) and the JetBrains Mono font (SIL Open Font
-License 1.1, see `internal/web/static/fonts/OFL.txt`) are bundled in `internal/web/static`.
+## Run details
 
-The look is orange cyberpunk with a terminal feel: dark only, monospace, square frames with
-titles in the border, neon glow and faint scanlines. It is all in
-`internal/web/static/style.css`: the palette sits in `:root` at the top (`--accent`,
-`--cyan`, `--series-0` to `--series-5` for chart lines), and the glow and scanlines can be
-dialled down there too.
+One run in full: distance, time, pace, heart rate and elevation, a lap table, and pace,
+heart rate, altitude and cadence charts over distance.
 
-Dates have a little life of their own: a neon gradient slowly flows through them, they
-"decrypt" from random glyphs into the real digits when a page loads, and again when you
-point at one (`internal/web/static/dates.js`). All of it switches off if your system asks
-for reduced motion.
+<img src="docs/screenshots/run.png" alt="Run details" width="820">
 
-## Filtering runs
+## Compare runs
 
-The box on the Activities page takes plain words and comparisons, and the query lives in
-the URL (`/activities?q=...`), so you can bookmark it. Words search the date, sport and
-device; comparisons use `> < >= <= = !=`; combine with `and`, `or`, `not` and parentheses
-(two terms side by side mean `and`).
+Two or more runs side by side, with their charts overlaid on the same distance axis.
 
-    2026                                 every run in 2026 (and 2026-03 for March)
-    distance > 5km                       longer than 5 km (800m, 3.1mi; a bare number is km)
-    pace < 6:20                          faster than 6:20 per km
-    time >= 30:00                        30 minutes or more (1:15:00, 45m, 1h30m; bare = minutes)
-    date >= 2026-03 and distance > 5km   since March, over 5 km
-    distance between 5km and 10km        both ends included
-    sport = running or device like fore
+<img src="docs/screenshots/compare.png" alt="Compare runs" width="820">
 
-Dates are whole periods in your time zone: `date = 2026` is the year, `date > 2026-03` means
-after the end of March. Values are compared as the list shows them, so a run listed as
-5.00 km matches `distance >= 5km`. A run without distance has no pace and matches no pace
-comparison. A query that can't be read is not applied; the page says what is wrong and
-points at it. The language is in `internal/query`, which is pure and heavily tested.
+## Credits
 
-## Flags
-
-Shared by `import` and `serve`:
-
-- `--db PATH`: the SQLite database. Defaults to `farrun.db`, or `anon.db` with `--anon`,
-  so demo data never ends up in your real database (unless you point `--db` at it).
-- `--anon`: use the anonymized demo data (`anonActivities`) and `anon.db`.
-- `--tz ZONE`: time zone for showing times, default `Europe/Warsaw`
-  (for example `--tz America/New_York`).
-
-Only for `serve`: `--addr HOST:PORT`, default `127.0.0.1:8080`.
-
-## About importing
-
-Importing the same files again is safe: activities are matched by source and external ID,
-so they are not duplicated. The whole import is one transaction, so it either fully
-succeeds or leaves the database untouched. A `.tcx` file that cannot be parsed is skipped
-with a warning and does not stop the others.
-
-The schema is versioned (`PRAGMA user_version`) and upgraded automatically when the
-database is opened. Migrations live in `internal/store/migrations`.
-
-## Layout
-
-- `cmd/farrun` - CLI entry point: the `import` and `serve` commands
-- `internal/importer` - parses a folder of `.tcx` files and saves them
-- `internal/model` - domain types
-- `internal/source` - `.tcx` parser
-- `internal/store` - SQLite persistence and migrations
-- `internal/analysis` - pace, heart rate, elevation gain and chart series (pure functions)
-- `internal/query` - the SQL-like filter language for the run list (pure functions)
-- `internal/web` - HTTP handlers, HTML templates and static files (embedded in the binary)
-
-## Development
-
-    go test -race ./...
-
-## For contributors
-
-`CONTEXT.md` has the background: how the code fits together, the rules behind the data cleanup
-and the query language, the lessons learned along the way, and the plan for showing runs on
-maps. Read it before changing things.
-
-## Notes
-
-The `activities` folder is gitignored, because the files contain GPS tracks.
-The local databases (`*.db`, along with their `-wal`/`-shm` files) are ignored too.
-`anonActivities` holds synthetic runs only; they are safe to commit.
+Co-written with Claude Code. I focused on the backend and SQL; the AI agent worked on the
+tests and the frontend.
