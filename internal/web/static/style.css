@@ -6,6 +6,12 @@
   --muted: #6b6b66;
   --line: #e3e3de;
   --accent: #0b6e4f;
+  --series-0: #0b6e4f;
+  --series-1: #d1495b;
+  --series-2: #2e86ab;
+  --series-3: #e08e0b;
+  --series-4: #7d5ba6;
+  --series-5: #4f6d7a;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -16,6 +22,12 @@
     --muted: #9a9a93;
     --line: #333330;
     --accent: #4cc39a;
+    --series-0: #4cc39a;
+    --series-1: #ef7686;
+    --series-2: #5bb4dd;
+    --series-3: #f2b240;
+    --series-4: #a98ad1;
+    --series-5: #8fb0be;
   }
 }
 
@@ -121,3 +133,51 @@ h2 { font-size: 1.2rem; margin: 2rem 0 0.75rem; }
 
 /* Chart.js sizes the canvas to this box. */
 .chart-box { position: relative; height: 16rem; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+input[type="checkbox"] { width: 1.1rem; height: 1.1rem; accent-color: var(--accent); vertical-align: middle; }
+
+.compare-bar { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-top: 1rem; }
+.compare-bar .muted { margin: 0; }
+
+button {
+  padding: 0.5rem 1rem;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) { button { color: #0d1f18; } }
+
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.swatch {
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  margin-right: 0.6rem;
+  border-radius: 50%;
+  vertical-align: baseline;
+}
+.s0 { background: var(--series-0); }
+.s1 { background: var(--series-1); }
+.s2 { background: var(--series-2); }
+.s3 { background: var(--series-3); }
+.s4 { background: var(--series-4); }
+.s5 { background: var(--series-5); }
+.s6 { background: var(--series-0); }
+.s7 { background: var(--series-1); }
+.s8 { background: var(--series-2); }
+.s9 { background: var(--series-3); }

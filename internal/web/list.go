@@ -21,6 +21,8 @@ type listRow struct {
 type listPage struct {
 	Rows          []listRow
 	TotalDistance float64
+	MinCompare    int
+	MaxCompare    int
 }
 
 func (s *server) handleList(w http.ResponseWriter, r *http.Request) {
@@ -30,7 +32,11 @@ func (s *server) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	page := listPage{Rows: make([]listRow, 0, len(activities))}
+	page := listPage{
+		Rows:       make([]listRow, 0, len(activities)),
+		MinCompare: minCompare,
+		MaxCompare: maxCompare,
+	}
 	for _, a := range activities {
 		row := listRow{
 			ID:       a.ID,

@@ -5,9 +5,9 @@
 (() => {
   'use strict';
 
-  // Distinct on light and dark backgrounds, and for common color blindness.
-  const COLORS = ['#0b6e4f', '#d1495b', '#2e86ab', '#e08e0b', '#7d5ba6', '#4f6d7a'];
-
+  // The palette lives in style.css (--series-0 ...) so chart lines and the
+  // table swatches next to them always match, in light and dark mode.
+  const SERIES_COLORS = 6;
   const minSec = (sec) => {
     const t = Math.round(sec);
     return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
@@ -21,13 +21,17 @@
   };
 
   const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const seriesColor = (i) => cssVar(`--series-${i % SERIES_COLORS}`);
 
   // Slow starts and stops give extreme paces that would squash the chart, so
-  // the pace axis follows the 2nd to 98th percentile of the data instead.
-  const percentileRange = (values) => {
+  // the pace axis follows the bulk of the data: the 2nd to 98th percentile,
+  // but never further than 35% slower or 30% faster than the median pace.
+  const paceRange = (values) => {
     const sorted = values.slice().sort((a, b) => a - b);
-    const lo = sorted[Math.floor((sorted.length - 1) * 0.02)];
-    const hi = sorted[Math.ceil((sorted.length - 1) * 0.98)];
+    const at = (q) => sorted[Math.round((sorted.length - 1) * q)];
+    const median = at(0.5);
+    const lo = Math.max(at(0.02), median * 0.7);
+    const hi = Math.min(at(0.98), median * 1.35);
     const pad = (hi - lo) * 0.05 || 1;
     return { min: lo - pad, max: hi + pad };
   };
@@ -46,8 +50,8 @@
     const datasets = runs.map((run, i) => ({
       label: run.label,
       data: run.points.map((p) => ({ x: p.distanceMeters / 1000, y: p[metric.field] })),
-      borderColor: COLORS[i % COLORS.length],
-      backgroundColor: COLORS[i % COLORS.length],
+      borderColor: seriesColor(i),
+      backgroundColor: seriesColor(i),
       borderWidth: 1.5,
       pointRadius: 0,
       pointHoverRadius: 3,
@@ -59,7 +63,7 @@
     if (values.length === 0) return false; // nothing recorded for this metric
 
     const y = { reverse: !!metric.reverse, ticks: { callback: (v) => metric.format(v) }, grid: { color: cssVar('--line') } };
-    if (canvas.dataset.metric === 'pace') Object.assign(y, percentileRange(values));
+    if (canvas.dataset.metric === 'pace') Object.assign(y, paceRange(values));
 
     new Chart(canvas, {
       type: 'line',

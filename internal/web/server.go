@@ -18,7 +18,7 @@ import (
 var assets embed.FS
 
 // pageNames are the templates in templates/, each combined with layout.html.
-var pageNames = []string{"list", "detail", "error"}
+var pageNames = []string{"list", "detail", "compare", "error"}
 
 type server struct {
 	store *store.Store
@@ -49,6 +49,7 @@ func NewHandler(st *store.Store, loc *time.Location) (http.Handler, error) {
 	mux.HandleFunc("GET /{$}", s.handleRoot)
 	mux.HandleFunc("GET /activities", s.handleList)
 	mux.HandleFunc("GET /activities/{id}", s.handleDetail)
+	mux.HandleFunc("GET /compare", s.handleCompare)
 	mux.HandleFunc("GET /api/activities/{id}/series", s.handleSeries)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
 
