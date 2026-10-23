@@ -1,11 +1,59 @@
 {{define "title"}}Activities{{end}}
 
 {{define "content"}}
-<h1>Activities</h1>
+<div class="list-head">
+  <h1>Activities</h1>
+
+  {{if .HasAny}}
+  <form class="query" method="get" action="/activities" role="search">
+    <label class="visually-hidden" for="q">Filter runs</label>
+    <span class="prompt" aria-hidden="true">?</span>
+    <input id="q" name="q" type="text" value="{{.Query}}" placeholder="distance &gt; 5km and pace &lt; 6:20"
+           autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="query-help">
+    <button type="submit">run</button>
+    {{if .Query}}<a class="clear" href="/activities">clear</a>{{end}}
+  </form>
+  {{end}}
+</div>
+
+{{if .HasAny}}
+{{if .QueryError}}
+<pre class="query-error" role="alert"><span class="bang">!</span> {{.QueryError}}
+  {{.Query}}
+  {{.QueryPointer}}</pre>
+<p class="muted">The query was not applied, so every run is shown.</p>
+{{else if .Filtered}}
+<p class="muted">{{.Matched}} of {{.Total}} runs match · {{km .TotalDistance}} km</p>
+{{else}}
+<p class="muted">{{.Total}} runs · {{km .TotalDistance}} km in total</p>
+{{end}}
+
+<details class="help" id="query-help">
+  <summary>query help</summary>
+  <div class="help-body">
+    <p>Type words to search the date, sport and device (<code>2026</code>, <code>2026-03</code>, <code>running</code>),
+       or compare a field with <code>&gt;</code> <code>&lt;</code> <code>&gt;=</code> <code>&lt;=</code> <code>=</code> <code>!=</code>.
+       Join terms with <code>and</code>, <code>or</code>, <code>not</code> and parentheses; two terms side by side mean <code>and</code>.
+       Press <kbd>/</kbd> to jump to the box.</p>
+    <table class="help-table">
+      <tbody>
+        <tr><th>distance</th><td><code>distance &gt; 5km</code> <code>800m</code> <code>3.1mi</code> <code>between 5km and 10km</code> (a bare number is km)</td></tr>
+        <tr><th>pace</th><td><code>pace &lt; 6:20</code> means faster than 6:20 per km</td></tr>
+        <tr><th>time</th><td><code>time &gt;= 30:00</code> <code>1:15:00</code> <code>45m</code> <code>1h30m</code> (a bare number is minutes)</td></tr>
+        <tr><th>date</th><td><code>date = 2026</code> <code>date &gt;= 2026-03</code> <code>date between 2026-01 and 2026-03</code></td></tr>
+        <tr><th>sport, device</th><td><code>sport = running</code> <code>device like forerunner</code></td></tr>
+      </tbody>
+    </table>
+    <p class="muted">Try:</p>
+    <ul class="examples">
+      {{range .Examples}}<li><a href="{{.URL}}">{{.Text}}</a></li>
+      {{end}}
+    </ul>
+  </div>
+</details>
+{{end}}
 
 {{if .Rows}}
-<p class="muted">{{len .Rows}} runs · {{km .TotalDistance}} km in total</p>
-
 <form method="get" action="/compare" data-compare-form data-min="{{.MinCompare}}" data-max="{{.MaxCompare}}">
   <div class="table-wrap">
     <table>
@@ -41,7 +89,11 @@
 </form>
 <script src="/static/list.js" defer></script>
 <script src="/static/sort.js" defer></script>
+{{else if .HasAny}}
+<p class="empty">No runs match <code>{{.Query}}</code>. <a href="/activities">Show all runs</a></p>
 {{else}}
 <p class="empty">No activities yet. Import your <code>.tcx</code> files with <code>farrun import</code> and reload.</p>
 {{end}}
+
+{{if .HasAny}}<script src="/static/query.js" defer></script>{{end}}
 {{end}}

@@ -26,8 +26,18 @@
   const columnIndex = (th) => th.cellIndex;
   const rows = [...tbody.rows];
 
-  // The server lists runs newest first, so that is where we start.
+  // The server lists runs newest first, so that is where we start. A query reloads
+  // the page, so the sort is remembered for this tab and picked up again here.
+  const STORAGE_KEY = 'farrun.sort';
   const state = { key: 'date', dir: 'desc' };
+
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(STORAGE_KEY));
+    if (saved && COLUMNS[saved.key] && (saved.dir === 'asc' || saved.dir === 'desc')) {
+      state.key = saved.key;
+      state.dir = saved.dir;
+    }
+  } catch { /* storage blocked or corrupt: start from the default */ }
 
   const cellValue = (row, index) => row.cells[index].dataset.sort;
 
@@ -76,6 +86,7 @@
       state.dir = COLUMNS[key].first;
     }
     apply();
+    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* not worth failing for */ }
   };
 
   for (const th of headers) {

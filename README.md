@@ -33,7 +33,8 @@ Needs Go 1.27 or newer.
 - **Activities** (`/activities`): all runs with date, distance, time and pace. Click a
   column header to sort: the first click puts the newest, longest or fastest first (A to Z
   for sport), the next one reverses it. Tick two or more runs and press *Compare selected*;
-  your ticks stay while you sort.
+  your ticks stay while you sort. The box on the right filters the runs with a small
+  SQL-like language (see below), and press `/` to jump to it.
 - **Run details** (`/activities/{id}`): distance, time, average pace, heart rate,
   elevation gain, a table of laps, and charts of pace, heart rate, altitude and cadence
   over distance.
@@ -57,6 +58,27 @@ Dates have a little life of their own: a neon gradient slowly flows through them
 "decrypt" from random glyphs into the real digits when a page loads, and again when you
 point at one (`internal/web/static/dates.js`). All of it switches off if your system asks
 for reduced motion.
+
+## Filtering runs
+
+The box on the Activities page takes plain words and comparisons, and the query lives in
+the URL (`/activities?q=...`), so you can bookmark it. Words search the date, sport and
+device; comparisons use `> < >= <= = !=`; combine with `and`, `or`, `not` and parentheses
+(two terms side by side mean `and`).
+
+    2026                                 every run in 2026 (and 2026-03 for March)
+    distance > 5km                       longer than 5 km (800m, 3.1mi; a bare number is km)
+    pace < 6:20                          faster than 6:20 per km
+    time >= 30:00                        30 minutes or more (1:15:00, 45m, 1h30m; bare = minutes)
+    date >= 2026-03 and distance > 5km   since March, over 5 km
+    distance between 5km and 10km        both ends included
+    sport = running or device like fore
+
+Dates are whole periods in your time zone: `date = 2026` is the year, `date > 2026-03` means
+after the end of March. Values are compared as the list shows them, so a run listed as
+5.00 km matches `distance >= 5km`. A run without distance has no pace and matches no pace
+comparison. A query that can't be read is not applied; the page says what is wrong and
+points at it. The language is in `internal/query`, which is pure and heavily tested.
 
 ## Flags
 
@@ -88,6 +110,7 @@ database is opened. Migrations live in `internal/store/migrations`.
 - `internal/source` - `.tcx` parser
 - `internal/store` - SQLite persistence and migrations
 - `internal/analysis` - pace, heart rate, elevation gain and chart series (pure functions)
+- `internal/query` - the SQL-like filter language for the run list (pure functions)
 - `internal/web` - HTTP handlers, HTML templates and static files (embedded in the binary)
 
 ## Development
