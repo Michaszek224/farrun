@@ -7,33 +7,42 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
+	"net/http"
 	"os"
+	"os/signal"
 	"time"
 	_ "time/tzdata" // so --tz works on machines without a system zoneinfo
 
 	"github.com/michaszek224/farrun/internal/importer"
 	"github.com/michaszek224/farrun/internal/model"
 	"github.com/michaszek224/farrun/internal/store"
+	"github.com/michaszek224/farrun/internal/web"
 )
 
 const (
 	defaultDB     = "farrun.db"
 	defaultAnonDB = "anon.db"
+	defaultAddr   = "127.0.0.1:8080"
 )
 
 const usage = `usage: farrun <command> [flags]
 
 commands:
   import   read .tcx files into the database and print a summary
+  serve    start the web UI (default http://` + defaultAddr + `)
 `
 
 func main() {
-	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	if err := run(ctx, os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(args []string, out, errOut io.Writer) error {
+func run(ctx context.Context, args []string, out, errOut io.Writer) error {
 	if len(args) == 0 {
 		fmt.Fprint(errOut, usage)
 		return errors.New("missing command")
@@ -41,13 +50,30 @@ func run(args []string, out, errOut io.Writer) error {
 
 	switch args[0] {
 	case "import":
-		return runImport(args[1:], out, errOut)
+		return runImport(ctx, args[1:], out, errOut)
+	case "serve":
+		return runServe(ctx, args[1:], out, errOut)
 	case "help", "-h", "--help":
 		fmt.Fprint(out, usage)
 		return nil
 	default:
 		fmt.Fprint(errOut, usage)
 		return fmt.Errorf("unknown command %q", args[0])
+	}
+}
+
+// commonFlags are the flags every command shares.
+type commonFlags struct {
+	anon *bool
+	db   *string
+	tz   *string
+}
+
+func addCommonFlags(fs *flag.FlagSet) commonFlags {
+	return commonFlags{
+		anon: fs.Bool("anon", false, "use the anonymized demo data (anonActivities, "+defaultAnonDB+")"),
+		db:   fs.String("db", "", "path to the SQLite database (default "+defaultDB+", or "+defaultAnonDB+" with --anon)"),
+		tz:   fs.String("tz", "Europe/Warsaw", "time zone used to show times"),
 	}
 }
 
@@ -64,24 +90,36 @@ func dbPath(flagValue string, anon bool) string {
 	}
 }
 
-func runImport(args []string, out, errOut io.Writer) (err error) {
+// openStore opens the database and returns it with a close function that
+// folds a close error into *err, unless an earlier error is already set.
+func openStore(path string, err *error) (*store.Store, func(), error) {
+	st, openErr := store.Open(path)
+	if openErr != nil {
+		return nil, nil, openErr
+	}
+	return st, func() {
+		if closeErr := st.Close(); closeErr != nil && *err == nil {
+			*err = fmt.Errorf("close database: %w", closeErr)
+		}
+	}, nil
+}
+
+func runImport(ctx context.Context, args []string, out, errOut io.Writer) (err error) {
 	fs := flag.NewFlagSet("farrun import", flag.ContinueOnError)
 	fs.SetOutput(errOut)
-	anon := fs.Bool("anon", false, "read anonymized files from anonActivities")
-	db := fs.String("db", "", "path to the SQLite database (default "+defaultDB+", or "+defaultAnonDB+" with --anon)")
-	tz := fs.String("tz", "Europe/Warsaw", "time zone used to print times")
+	common := addCommonFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
 	dir := "activities"
-	if *anon {
+	if *common.anon {
 		dir = "anonActivities"
 	}
 
-	loc, err := time.LoadLocation(*tz)
+	loc, err := time.LoadLocation(*common.tz)
 	if err != nil {
-		return fmt.Errorf("load time zone %q: %w", *tz, err)
+		return fmt.Errorf("load time zone %q: %w", *common.tz, err)
 	}
 
 	// Check before opening the database, which would create an empty file.
@@ -89,17 +127,13 @@ func runImport(args []string, out, errOut io.Writer) (err error) {
 		return fmt.Errorf("read dir %s: %w", dir, err)
 	}
 
-	st, err := store.Open(dbPath(*db, *anon))
+	st, closeStore, err := openStore(dbPath(*common.db, *common.anon), &err)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if closeErr := st.Close(); closeErr != nil && err == nil {
-			err = fmt.Errorf("close database: %w", closeErr)
-		}
-	}()
+	defer closeStore()
 
-	res, err := importer.Run(context.Background(), dir, st)
+	res, err := importer.Run(ctx, dir, st)
 	if err != nil {
 		return err
 	}
@@ -118,6 +152,71 @@ func runImport(args []string, out, errOut io.Writer) (err error) {
 	}
 
 	return nil
+}
+
+func runServe(ctx context.Context, args []string, out, errOut io.Writer) (err error) {
+	fs := flag.NewFlagSet("farrun serve", flag.ContinueOnError)
+	fs.SetOutput(errOut)
+	common := addCommonFlags(fs)
+	addr := fs.String("addr", defaultAddr, "address to listen on")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	loc, err := time.LoadLocation(*common.tz)
+	if err != nil {
+		return fmt.Errorf("load time zone %q: %w", *common.tz, err)
+	}
+
+	st, closeStore, err := openStore(dbPath(*common.db, *common.anon), &err)
+	if err != nil {
+		return err
+	}
+	defer closeStore()
+
+	handler, err := web.NewHandler(st, loc)
+	if err != nil {
+		return err
+	}
+
+	ln, err := net.Listen("tcp", *addr)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", *addr, err)
+	}
+	if !isLoopback(ln.Addr()) {
+		fmt.Fprintf(errOut, "warning: listening on %s, so anyone on the network can read your runs and GPS tracks\n", ln.Addr())
+	}
+
+	srv := &http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	fmt.Fprintf(out, "Listening on http://%s (Ctrl+C to stop)\n", ln.Addr())
+
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- srv.Serve(ln) }()
+
+	select {
+	case err := <-serveErr: // Serve only returns on failure here
+		return err
+	case <-ctx.Done():
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("shut down server: %w", err)
+	}
+	return nil
+}
+
+func isLoopback(a net.Addr) bool {
+	tcp, ok := a.(*net.TCPAddr)
+	return ok && tcp.IP.IsLoopback()
 }
 
 func printActivity(out io.Writer, a model.Activity, loc *time.Location) {

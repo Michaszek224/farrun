@@ -1,0 +1,35 @@
+{{define "title"}}Activities{{end}}
+
+{{define "content"}}
+<h1>Activities</h1>
+
+{{if .Rows}}
+<p class="muted">{{len .Rows}} runs · {{km .TotalDistance}} km in total</p>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Sport</th>
+        <th class="num">Distance (km)</th>
+        <th class="num">Time</th>
+        <th class="num">Pace (/km)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr>
+        <td><a href="/activities/{{.ID}}">{{date .Start}}</a></td>
+        <td>{{.Sport}}</td>
+        <td class="num">{{km .Distance}}</td>
+        <td class="num">{{duration .Duration}}</td>
+        <td class="num">{{if .HasPace}}{{pace .Pace}}{{else}}–{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<p class="empty">No activities yet. Import your <code>.tcx</code> files with <code>farrun import</code> and reload.</p>
+{{end}}
+{{end}}

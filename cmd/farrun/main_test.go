@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -74,7 +76,7 @@ func TestRun(t *testing.T) {
 	dbPath := filepath.Join(dir, "test.db")
 
 	var out bytes.Buffer
-	if err := run([]string{"import", "--db", dbPath}, &out, io.Discard); err != nil {
+	if err := run(context.Background(), []string{"import", "--db", dbPath}, &out, io.Discard); err != nil {
 		t.Fatalf("run() error = %v", err)
 	}
 
@@ -120,7 +122,7 @@ func TestRun(t *testing.T) {
 	}
 
 	out.Reset()
-	if err := run([]string{"import", "--db", dbPath}, &out, io.Discard); err != nil {
+	if err := run(context.Background(), []string{"import", "--db", dbPath}, &out, io.Discard); err != nil {
 		t.Fatalf("second run() error = %v", err)
 	}
 	if !strings.Contains(out.String(), "Imported 0 new activities (1 in database)") {
@@ -135,7 +137,7 @@ func TestRunSkipsInvalidFiles(t *testing.T) {
 	writeFile(t, filepath.Join("activities", "bad.tcx"), "not xml")
 
 	var out, errOut bytes.Buffer
-	if err := run([]string{"import", "--db", filepath.Join(dir, "test.db")}, &out, &errOut); err != nil {
+	if err := run(context.Background(), []string{"import", "--db", filepath.Join(dir, "test.db")}, &out, &errOut); err != nil {
 		t.Fatalf("run() error = %v", err)
 	}
 	if !strings.Contains(out.String(), "Imported 1 new activities (1 in database, 1 files skipped)") {
@@ -152,7 +154,7 @@ func TestRunAnon(t *testing.T) {
 	writeFile(t, filepath.Join("anonActivities", "run.tcx"), runTCX)
 
 	var out bytes.Buffer
-	if err := run([]string{"import", "--anon", "--db", filepath.Join(dir, "test.db")}, &out, io.Discard); err != nil {
+	if err := run(context.Background(), []string{"import", "--anon", "--db", filepath.Join(dir, "test.db")}, &out, io.Discard); err != nil {
 		t.Fatalf("run() error = %v", err)
 	}
 	if !strings.Contains(out.String(), "Imported 1 new activities") {
@@ -166,7 +168,7 @@ func TestRunAnonUsesSeparateDatabase(t *testing.T) {
 	writeFile(t, filepath.Join("anonActivities", "run.tcx"), runTCX)
 	writeFile(t, filepath.Join("activities", "run.tcx"), runTCX)
 
-	if err := run([]string{"import", "--anon"}, io.Discard, io.Discard); err != nil {
+	if err := run(context.Background(), []string{"import", "--anon"}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("anon run() error = %v", err)
 	}
 	if _, err := os.Stat(defaultAnonDB); err != nil {
@@ -176,7 +178,7 @@ func TestRunAnonUsesSeparateDatabase(t *testing.T) {
 		t.Errorf("%s was created by an --anon run", defaultDB)
 	}
 
-	if err := run([]string{"import"}, io.Discard, io.Discard); err != nil {
+	if err := run(context.Background(), []string{"import"}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("real run() error = %v", err)
 	}
 	if _, err := os.Stat(defaultDB); err != nil {
@@ -190,7 +192,7 @@ func TestRunErrors(t *testing.T) {
 
 		dbPath := filepath.Join(t.TempDir(), "test.db")
 
-		err := run([]string{"import", "--db", dbPath}, &bytes.Buffer{}, io.Discard)
+		err := run(context.Background(), []string{"import", "--db", dbPath}, &bytes.Buffer{}, io.Discard)
 		if err == nil {
 			t.Fatal("run() error = nil, want an error")
 		}
@@ -205,7 +207,7 @@ func TestRunErrors(t *testing.T) {
 		writeFile(t, filepath.Join("activities", "run.tcx"), runTCX)
 		dbPath := filepath.Join(dir, "test.db")
 
-		err := run([]string{"import", "--db", dbPath, "--tz", "Mars/Olympus"}, &bytes.Buffer{}, io.Discard)
+		err := run(context.Background(), []string{"import", "--db", dbPath, "--tz", "Mars/Olympus"}, &bytes.Buffer{}, io.Discard)
 		if err == nil {
 			t.Fatal("run() error = nil, want an error")
 		}
@@ -215,7 +217,7 @@ func TestRunErrors(t *testing.T) {
 	})
 
 	t.Run("unknown flag", func(t *testing.T) {
-		if err := run([]string{"import", "--nope"}, &bytes.Buffer{}, io.Discard); err == nil {
+		if err := run(context.Background(), []string{"import", "--nope"}, &bytes.Buffer{}, io.Discard); err == nil {
 			t.Fatal("run() error = nil, want an error")
 		}
 	})
@@ -225,7 +227,7 @@ func TestRunErrors(t *testing.T) {
 		t.Chdir(dir)
 		writeFile(t, filepath.Join("activities", "run.tcx"), runTCX)
 
-		err := run([]string{"import", "--db", dir}, &bytes.Buffer{}, io.Discard)
+		err := run(context.Background(), []string{"import", "--db", dir}, &bytes.Buffer{}, io.Discard)
 		if err == nil {
 			t.Fatal("run() error = nil, want an error")
 		}
@@ -235,20 +237,20 @@ func TestRunErrors(t *testing.T) {
 func TestRunCommands(t *testing.T) {
 	var out, errOut bytes.Buffer
 
-	if err := run(nil, &out, &errOut); err == nil {
+	if err := run(context.Background(), nil, &out, &errOut); err == nil {
 		t.Error("run() without a command: error = nil, want an error")
 	}
 	if !strings.Contains(errOut.String(), "usage: farrun") {
 		t.Errorf("stderr = %q, want the usage text", errOut.String())
 	}
 
-	if err := run([]string{"nope"}, io.Discard, io.Discard); err == nil ||
+	if err := run(context.Background(), []string{"nope"}, io.Discard, io.Discard); err == nil ||
 		!strings.Contains(err.Error(), `unknown command "nope"`) {
 		t.Errorf("run(nope) error = %v, want an unknown command error", err)
 	}
 
 	out.Reset()
-	if err := run([]string{"help"}, &out, io.Discard); err != nil {
+	if err := run(context.Background(), []string{"help"}, &out, io.Discard); err != nil {
 		t.Fatalf("run(help) error = %v", err)
 	}
 	if !strings.Contains(out.String(), "import") {
@@ -312,5 +314,109 @@ func TestPrintActivity(t *testing.T) {
 	}
 	if count := strings.Count(got, "  #"); count != 5 {
 		t.Errorf("output has %d point lines, want 5:\n%s", count, got)
+	}
+}
+
+// syncBuffer lets the test read what serve prints while serve is still running.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func TestRunServe(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	writeFile(t, filepath.Join("activities", "run.tcx"), runTCX)
+	dbPath := filepath.Join(dir, "test.db")
+
+	if err := run(context.Background(), []string{"import", "--db", dbPath}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("import error = %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var out syncBuffer
+	done := make(chan error, 1)
+	go func() {
+		done <- run(ctx, []string{"serve", "--db", dbPath, "--addr", "127.0.0.1:0"}, &out, io.Discard)
+	}()
+
+	// serve prints its address once it is listening.
+	var base string
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if _, rest, ok := strings.Cut(out.String(), "Listening on "); ok {
+			base, _, _ = strings.Cut(rest, " ")
+			break
+		}
+	}
+	if base == "" {
+		t.Fatalf("serve did not report an address; output = %q", out.String())
+	}
+
+	resp, err := http.Get(base + "/activities")
+	if err != nil {
+		t.Fatalf("GET /activities: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "2026-10-20") {
+		t.Errorf("GET /activities = %d, body %q; want 200 listing the imported run", resp.StatusCode, body)
+	}
+
+	cancel() // like Ctrl+C
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("serve returned %v after shutdown, want nil", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("serve did not stop after the context was cancelled")
+	}
+}
+
+func TestRunServeWarnsOnNonLoopback(t *testing.T) {
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var out, errOut syncBuffer
+	done := make(chan error, 1)
+	go func() {
+		done <- run(ctx, []string{"serve", "--db", filepath.Join(dir, "test.db"), "--addr", "0.0.0.0:0"}, &out, &errOut)
+	}()
+
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) && !strings.Contains(out.String(), "Listening"); time.Sleep(10 * time.Millisecond) {
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("serve error = %v", err)
+	}
+	if !strings.Contains(errOut.String(), "warning: listening on") {
+		t.Errorf("stderr = %q, want a warning about the network address", errOut.String())
+	}
+}
+
+func TestRunServeErrors(t *testing.T) {
+	dir := t.TempDir()
+	db := filepath.Join(dir, "test.db")
+
+	if err := run(context.Background(), []string{"serve", "--db", db, "--addr", "not-an-address"}, io.Discard, io.Discard); err == nil {
+		t.Error("serve with a bad address: error = nil, want an error")
+	}
+	if err := run(context.Background(), []string{"serve", "--db", db, "--tz", "Mars/Olympus"}, io.Discard, io.Discard); err == nil {
+		t.Error("serve with a bad time zone: error = nil, want an error")
 	}
 }
