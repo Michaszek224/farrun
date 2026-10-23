@@ -17,15 +17,15 @@ summary of each run (date, distance, time). The web UI is next.
 
 Put your `.tcx` files in `activities/` and run:
 
-    go run ./cmd/farrun
+    go run ./cmd/farrun import
 
 Or you can just use anon data:
 
-    go run ./cmd/farrun --anon
+    go run ./cmd/farrun import --anon
 
 Runs are stored in `farrun.db` by default. You can choose another path with:
 
-    go run ./cmd/farrun --db /path/to/farrun.db
+    go run ./cmd/farrun import --db /path/to/farrun.db
 
 `--anon` uses a separate `anon.db` by default, so demo data never ends up in
 your real database (unless you point `--db` at it yourself).
@@ -45,6 +45,7 @@ Needs Go 1.27 or newer.
 ## Layout
 
 - `cmd/farrun` - CLI entry point and wiring
+- `internal/importer` - parses a folder of `.tcx` files and saves them
 - `internal/model` - domain types
 - `internal/source` - `.tcx` parser
 - `internal/store` - SQLite persistence

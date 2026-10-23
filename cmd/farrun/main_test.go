@@ -74,7 +74,7 @@ func TestRun(t *testing.T) {
 	dbPath := filepath.Join(dir, "test.db")
 
 	var out bytes.Buffer
-	if err := run([]string{"--db", dbPath}, &out, io.Discard); err != nil {
+	if err := run([]string{"import", "--db", dbPath}, &out, io.Discard); err != nil {
 		t.Fatalf("run() error = %v", err)
 	}
 
@@ -120,7 +120,7 @@ func TestRun(t *testing.T) {
 	}
 
 	out.Reset()
-	if err := run([]string{"--db", dbPath}, &out, io.Discard); err != nil {
+	if err := run([]string{"import", "--db", dbPath}, &out, io.Discard); err != nil {
 		t.Fatalf("second run() error = %v", err)
 	}
 	if !strings.Contains(out.String(), "Imported 0 new activities (1 in database)") {
@@ -135,7 +135,7 @@ func TestRunSkipsInvalidFiles(t *testing.T) {
 	writeFile(t, filepath.Join("activities", "bad.tcx"), "not xml")
 
 	var out, errOut bytes.Buffer
-	if err := run([]string{"--db", filepath.Join(dir, "test.db")}, &out, &errOut); err != nil {
+	if err := run([]string{"import", "--db", filepath.Join(dir, "test.db")}, &out, &errOut); err != nil {
 		t.Fatalf("run() error = %v", err)
 	}
 	if !strings.Contains(out.String(), "Imported 1 new activities (1 in database, 1 files skipped)") {
@@ -152,7 +152,7 @@ func TestRunAnon(t *testing.T) {
 	writeFile(t, filepath.Join("anonActivities", "run.tcx"), runTCX)
 
 	var out bytes.Buffer
-	if err := run([]string{"--anon", "--db", filepath.Join(dir, "test.db")}, &out, io.Discard); err != nil {
+	if err := run([]string{"import", "--anon", "--db", filepath.Join(dir, "test.db")}, &out, io.Discard); err != nil {
 		t.Fatalf("run() error = %v", err)
 	}
 	if !strings.Contains(out.String(), "Imported 1 new activities") {
@@ -166,7 +166,7 @@ func TestRunAnonUsesSeparateDatabase(t *testing.T) {
 	writeFile(t, filepath.Join("anonActivities", "run.tcx"), runTCX)
 	writeFile(t, filepath.Join("activities", "run.tcx"), runTCX)
 
-	if err := run([]string{"--anon"}, io.Discard, io.Discard); err != nil {
+	if err := run([]string{"import", "--anon"}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("anon run() error = %v", err)
 	}
 	if _, err := os.Stat(defaultAnonDB); err != nil {
@@ -176,7 +176,7 @@ func TestRunAnonUsesSeparateDatabase(t *testing.T) {
 		t.Errorf("%s was created by an --anon run", defaultDB)
 	}
 
-	if err := run(nil, io.Discard, io.Discard); err != nil {
+	if err := run([]string{"import"}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("real run() error = %v", err)
 	}
 	if _, err := os.Stat(defaultDB); err != nil {
@@ -188,9 +188,14 @@ func TestRunErrors(t *testing.T) {
 	t.Run("missing activities directory", func(t *testing.T) {
 		t.Chdir(t.TempDir())
 
-		err := run([]string{"--db", filepath.Join(t.TempDir(), "test.db")}, &bytes.Buffer{}, io.Discard)
+		dbPath := filepath.Join(t.TempDir(), "test.db")
+
+		err := run([]string{"import", "--db", dbPath}, &bytes.Buffer{}, io.Discard)
 		if err == nil {
 			t.Fatal("run() error = nil, want an error")
+		}
+		if _, statErr := os.Stat(dbPath); statErr == nil {
+			t.Error("database was created even though the activities directory is missing")
 		}
 	})
 
@@ -200,7 +205,7 @@ func TestRunErrors(t *testing.T) {
 		writeFile(t, filepath.Join("activities", "run.tcx"), runTCX)
 		dbPath := filepath.Join(dir, "test.db")
 
-		err := run([]string{"--db", dbPath, "--tz", "Mars/Olympus"}, &bytes.Buffer{}, io.Discard)
+		err := run([]string{"import", "--db", dbPath, "--tz", "Mars/Olympus"}, &bytes.Buffer{}, io.Discard)
 		if err == nil {
 			t.Fatal("run() error = nil, want an error")
 		}
@@ -210,7 +215,7 @@ func TestRunErrors(t *testing.T) {
 	})
 
 	t.Run("unknown flag", func(t *testing.T) {
-		if err := run([]string{"--nope"}, &bytes.Buffer{}, io.Discard); err == nil {
+		if err := run([]string{"import", "--nope"}, &bytes.Buffer{}, io.Discard); err == nil {
 			t.Fatal("run() error = nil, want an error")
 		}
 	})
@@ -220,11 +225,52 @@ func TestRunErrors(t *testing.T) {
 		t.Chdir(dir)
 		writeFile(t, filepath.Join("activities", "run.tcx"), runTCX)
 
-		err := run([]string{"--db", dir}, &bytes.Buffer{}, io.Discard)
+		err := run([]string{"import", "--db", dir}, &bytes.Buffer{}, io.Discard)
 		if err == nil {
 			t.Fatal("run() error = nil, want an error")
 		}
 	})
+}
+
+func TestRunCommands(t *testing.T) {
+	var out, errOut bytes.Buffer
+
+	if err := run(nil, &out, &errOut); err == nil {
+		t.Error("run() without a command: error = nil, want an error")
+	}
+	if !strings.Contains(errOut.String(), "usage: farrun") {
+		t.Errorf("stderr = %q, want the usage text", errOut.String())
+	}
+
+	if err := run([]string{"nope"}, io.Discard, io.Discard); err == nil ||
+		!strings.Contains(err.Error(), `unknown command "nope"`) {
+		t.Errorf("run(nope) error = %v, want an unknown command error", err)
+	}
+
+	out.Reset()
+	if err := run([]string{"help"}, &out, io.Discard); err != nil {
+		t.Fatalf("run(help) error = %v", err)
+	}
+	if !strings.Contains(out.String(), "import") {
+		t.Errorf("help output = %q, want it to list the import command", out.String())
+	}
+}
+
+func TestDBPath(t *testing.T) {
+	for _, tc := range []struct {
+		flag string
+		anon bool
+		want string
+	}{
+		{"", false, defaultDB},
+		{"", true, defaultAnonDB},
+		{"custom.db", false, "custom.db"},
+		{"custom.db", true, "custom.db"},
+	} {
+		if got := dbPath(tc.flag, tc.anon); got != tc.want {
+			t.Errorf("dbPath(%q, %v) = %q, want %q", tc.flag, tc.anon, got, tc.want)
+		}
+	}
 }
 
 func TestPrintActivity(t *testing.T) {
