@@ -329,3 +329,76 @@ func TestDetailStatLabelsFitTheirFrames(t *testing.T) {
 		}
 	}
 }
+
+func TestDatesAreMarkedForAnimation(t *testing.T) {
+	h := newTestHandler(t,
+		detailedRun("a", 3),
+		sampleRun("b", time.Date(2026, 10, 21, 5, 30, 0, 0, time.UTC), 5000, 1500),
+	)
+
+	// The real date stays in the HTML: the animation only decorates it.
+	_, list := get(t, h, "/activities")
+	if got := strings.Count(list, `<a data-date href="/activities/`); got != 2 {
+		t.Errorf("list has %d animated date links, want 2", got)
+	}
+	if !strings.Contains(list, ">2026-10-21 07:30</a>") {
+		t.Error("the real date text is missing from the list")
+	}
+
+	_, detail := get(t, h, "/activities/1")
+	if !strings.Contains(detail, "<h1 data-date>2026-10-20 07:30</h1>") {
+		t.Error("detail headline is not marked for animation")
+	}
+
+	_, compare := get(t, h, "/compare?id=1&id=2")
+	if got := strings.Count(compare, `<a data-date href="/activities/`); got != 2 {
+		t.Errorf("compare table has %d animated date links, want 2", got)
+	}
+
+	// Every page loads the script, from our own server (the CSP forbids inline scripts).
+	for name, body := range map[string]string{"list": list, "detail": detail, "compare": compare} {
+		if !strings.Contains(body, `<script src="/static/dates.js" defer></script>`) {
+			t.Errorf("%s page does not load dates.js", name)
+		}
+	}
+}
+
+func TestDatesScriptKeepsRealTextAccessible(t *testing.T) {
+	res, js := get(t, newTestHandler(t), "/static/dates.js")
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("GET /static/dates.js = %d", res.StatusCode)
+	}
+	for _, want := range []string{
+		"prefers-reduced-motion", // respects the user's setting
+		"aria-label",             // screen readers get the real date, not the noise
+	} {
+		if !strings.Contains(js, want) {
+			t.Errorf("dates.js does not mention %q", want)
+		}
+	}
+}
+
+func TestStylesheetAnimatesDatesButRespectsReducedMotion(t *testing.T) {
+	_, css := get(t, newTestHandler(t), "/static/style.css")
+
+	if !strings.Contains(css, "a[data-date]") || !strings.Contains(css, "@keyframes flow") {
+		t.Error("stylesheet has no animation for the dates")
+	}
+	i := strings.Index(css, "prefers-reduced-motion")
+	if i < 0 {
+		t.Fatal("stylesheet ignores prefers-reduced-motion")
+	}
+	if block := css[i:]; !strings.Contains(block, "a[data-date]") || !strings.Contains(block, "animation: none") {
+		t.Error("reduced motion does not switch the date animation off")
+	}
+}
+
+func TestFontsArePreloaded(t *testing.T) {
+	_, body := get(t, newTestHandler(t), "/activities")
+	for _, font := range []string{"JetBrainsMono-Regular.woff2", "JetBrainsMono-Bold.woff2"} {
+		want := `<link rel="preload" href="/static/fonts/` + font + `" as="font" type="font/woff2" crossorigin>`
+		if !strings.Contains(body, want) {
+			t.Errorf("layout does not preload %s (it is needed for the first paint)", font)
+		}
+	}
+}

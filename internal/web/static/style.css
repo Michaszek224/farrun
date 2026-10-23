@@ -138,6 +138,46 @@ h2::after { content: ""; flex: 1; border-top: 1px dashed var(--frame); }
 a { color: var(--cyan); text-decoration: none; }
 a:hover, a:focus-visible { background: var(--cyan); color: var(--bg); box-shadow: var(--glow-cyan); }
 
+/* Dates: neon text with a slow gradient flowing through it (cyan, blue, violet, pink).
+   The colors are the chart palette, so a date and its chart line look related. */
+a[data-date] {
+  display: inline-block;
+  color: var(--cyan); /* fallback where background-clip: text is missing */
+  background-image: linear-gradient(90deg, var(--cyan), #6aa6ff, var(--series-4), var(--series-2), var(--series-4), #6aa6ff, var(--cyan));
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 5px rgba(34, 230, 242, 0.45));
+  /* The flow is slow (about 50px a second), so 15 redraws a second look as smooth
+     as 60 and cost a quarter of the CPU, which matters with a table full of dates. */
+  animation: flow 8s steps(120) infinite;
+}
+
+@keyframes flow { to { background-position: -300% 0; } }
+
+/* Pointing at a date speeds the flow up, gives it a hotter glow, and jolts it once.
+   (Not the default link hover: that fill would hide the gradient.) */
+a[data-date]:hover,
+a[data-date]:focus-visible {
+  background-color: transparent;
+  box-shadow: none;
+  filter: drop-shadow(0 0 7px rgba(255, 61, 139, 0.75)) drop-shadow(0 0 3px rgba(34, 230, 242, 0.8));
+  animation: flow 1.6s steps(48) infinite, glitch 0.32s steps(1) 1;
+}
+
+@keyframes glitch {
+  0%   { transform: translate(0, 0); }
+  15%  { transform: translate(-2px, 0) skewX(-6deg); }
+  30%  { transform: translate(2px, -1px); }
+  45%  { transform: translate(-1px, 1px) skewX(4deg); }
+  60%  { transform: translate(1px, 0); }
+  100% { transform: translate(0, 0); }
+}
+
+/* The date headline on a run's page settles in the same way, in its own orange. */
+h1[data-date] { font-variant-numeric: tabular-nums; }
+
 :focus-visible { outline: 1px dashed var(--cyan); outline-offset: 3px; }
 
 .muted { color: var(--muted); margin-top: 0; }
@@ -362,7 +402,10 @@ th button.sort:hover { color: var(--hot); }
 th button.sort:focus-visible { outline: 1px dashed var(--cyan); outline-offset: 3px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .brand::after { animation: none; }
+  .brand::after,
+  a[data-date],
+  a[data-date]:hover,
+  a[data-date]:focus-visible { animation: none; }
 }
 
 @media (max-width: 40rem) {

@@ -23,7 +23,7 @@
         {{range .Rows}}
         <tr>
           <td><input type="checkbox" name="id" value="{{.ID}}" aria-label="Select {{date .Start}}"></td>
-          <td data-sort="{{.Start.Unix}}"><a href="/activities/{{.ID}}">{{date .Start}}</a></td>
+          <td data-sort="{{.Start.Unix}}"><a data-date href="/activities/{{.ID}}">{{date .Start}}</a></td>
           <td data-sort="{{.Sport}}">{{.Sport}}</td>
           <td class="num" data-sort="{{num .Distance}}">{{km .Distance}}</td>
           <td class="num" data-sort="{{num .Duration}}">{{duration .Duration}}</td>

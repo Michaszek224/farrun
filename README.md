@@ -53,6 +53,11 @@ titles in the border, neon glow and faint scanlines. It is all in
 `--cyan`, `--series-0` to `--series-5` for chart lines), and the glow and scanlines can be
 dialled down there too.
 
+Dates have a little life of their own: a neon gradient slowly flows through them, they
+"decrypt" from random glyphs into the real digits when a page loads, and again when you
+point at one (`internal/web/static/dates.js`). All of it switches off if your system asks
+for reduced motion.
+
 ## Flags
 
 Shared by `import` and `serve`:

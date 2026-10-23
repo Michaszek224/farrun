@@ -20,7 +20,7 @@
     <tbody>
       {{range .Runs}}
       <tr>
-        <td><span class="swatch s{{.Index}}"></span><a href="/activities/{{.ID}}">{{date .Start}}</a></td>
+        <td><span class="swatch s{{.Index}}"></span><a data-date href="/activities/{{.ID}}">{{date .Start}}</a></td>
         <td class="num">{{km .Distance}}</td>
         <td class="num">{{duration .Duration}}</td>
         <td class="num">{{.Pace}}</td>
